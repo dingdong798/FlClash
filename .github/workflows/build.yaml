@@ -93,6 +93,10 @@ jobs:
       
       - name: Check flutter_distributor
         run: flutter_distributor --version
+        
+      - name: Accept Android Licenses
+        run: yes | flutter doctor --android-licenses
+
 
       - name: Setup Build
         run: dart setup.dart ${{ matrix.platform }} ${{ matrix.arch && format('--arch {0}', matrix.arch) }} ${{ env.IS_STABLE == 'true' && '--env stable' || '' }}
