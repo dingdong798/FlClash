@@ -2,9 +2,8 @@ name: build
 
 on:
   push:
-    branches:
-      - main
-
+    tags:
+      - 'v*'
 env:
   IS_STABLE: ${{ !contains(github.ref, '-') }}
 
@@ -70,25 +69,18 @@ jobs:
         with:
           channel: 'master'
           cache: true
-
       - name: Setup Flutter
         if: ${{ !(startsWith(matrix.os, 'windows-11-arm') || startsWith(matrix.os, 'ubuntu-24.04-arm')) }}
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
-          flutter-version: 3.29.3
+      #          flutter-version: 3.29.3
 
       - name: Get Flutter Dependency
         run: flutter pub get
 
-      - name: Activate flutter_distributor
-        run: dart pub global activate flutter_distributor
-
-      - name: Add flutter_distributor to PATH
-        run: echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
-
-      - name: Setup Build
+      - name: Setup
         run: dart setup.dart ${{ matrix.platform }} ${{ matrix.arch && format('--arch {0}', matrix.arch) }} ${{ env.IS_STABLE == 'true' && '--env stable' || '' }}
 
       - name: Upload
@@ -97,7 +89,6 @@ jobs:
           name: artifact-${{ matrix.platform }}${{ matrix.arch && format('-{0}', matrix.arch) }}
           path: ./dist
           overwrite: true
-
 
   changelog:
     runs-on: ubuntu-latest
@@ -265,4 +256,3 @@ jobs:
           target-branch: main
           commit-message: Update from ${{ github.ref_name }}
           target-directory: /tmp/
-
