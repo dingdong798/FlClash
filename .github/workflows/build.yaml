@@ -3,8 +3,9 @@ name: build
 on:
   push:
     branches:
-      - main
-
+      - main    # 添加 main 分支触发
+    tags:
+      - 'v*'    # 保留标签触发
 env:
   IS_STABLE: ${{ !contains(github.ref, '-') }}
 
@@ -52,10 +53,23 @@ jobs:
       - name: Setup Android Signing
         if: startsWith(matrix.platform,'android')
         run: |
-          echo "${{ secrets.KEYSTORE }}" | base64 --decode > android/app/keystore.jks
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/local.properties
-          echo "storePassword=${{ secrets.STORE_PASSWORD }}" >> android/local.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/local.properties
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "Generating temporary debug keystore..."
+            keytool -genkey -v \
+              -keystore $ANDROID_KEYSTORE_PATH \
+              -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android \
+              -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US"
+          else
+            echo "Using production keystore from secrets..."
+            echo "$KEYSTORE_BASE64" | base64 --decode > $ANDROID_KEYSTORE_PATH
+            echo "storeFile=$ANDROID_KEYSTORE_PATH" >> android/local.properties
+            echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/local.properties
+            echo "storePassword=${{ secrets.STORE_PASSWORD }}" >> android/local.properties
+            echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/local.properties
+          fi
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -70,35 +84,18 @@ jobs:
         with:
           channel: 'master'
           cache: true
-
       - name: Setup Flutter
         if: ${{ !(startsWith(matrix.os, 'windows-11-arm') || startsWith(matrix.os, 'ubuntu-24.04-arm')) }}
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
-          flutter-version: 3.32.4
+      #          flutter-version: 3.29.3
 
       - name: Get Flutter Dependency
         run: flutter pub get
 
-      - name: Activate flutter_distributor
-        run: dart pub global activate flutter_distributor
-
-      - name: Add flutter_distributor to PATH
-        run: echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
-        
-      - name: Flutter Doctor
-        run: flutter doctor -v
-      
-      - name: Check flutter_distributor
-        run: flutter_distributor --version
-        
-      - name: Accept Android Licenses
-        run: yes | flutter doctor --android-licenses
-
-
-      - name: Setup Build
+      - name: Setup
         run: dart setup.dart ${{ matrix.platform }} ${{ matrix.arch && format('--arch {0}', matrix.arch) }} ${{ env.IS_STABLE == 'true' && '--env stable' || '' }}
 
       - name: Upload
@@ -107,7 +104,6 @@ jobs:
           name: artifact-${{ matrix.platform }}${{ matrix.arch && format('-{0}', matrix.arch) }}
           path: ./dist
           overwrite: true
-
 
   changelog:
     runs-on: ubuntu-latest
@@ -275,4 +271,3 @@ jobs:
           target-branch: main
           commit-message: Update from ${{ github.ref_name }}
           target-directory: /tmp/
-
